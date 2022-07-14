@@ -1,6 +1,6 @@
 # Algorithmic Determination of the Combinatorial Structure of the Linear Regions of ReLU Neural Networks
 
-This repository is an improved version of the code implemented for _Algorithmic Determination of the Combinatorial Structure of the Linear Regions of ReLU Neural Networks_.
+This repository is an improved version of the code implemented for _Algorithmic Determination of the Combinatorial Structure of the Linear Regions of ReLU Neural Networks_. It is structured very similarly, but uses a different mathematical approach to obtain the desired polyhedral complex, resulting in exponential speedup. 
 
 The included code computes the polyhedral complex of a ReLU Neural Network in Pytorch by computing only the vertices and their sign sequences. This allows for computation of topological invariants of subcomplexes of the polyhedral complex, for example, its decision boundary. 
 
