@@ -898,7 +898,6 @@ def get_full_complex(model, max_depth=None, device=None, mode='solve', verbose=F
                 affmaps.append(affmap[None,:])
                 biases.append(bias)
                 
-                combo = torch.hstack([which_hyperplanes, torch.Tensor([num])+sum(architecture[1:i+1])])
                 combo = torch.hstack([which_hyperplanes, torch.tensor([num], device=device)+sum(architecture[1:i+1])])
                 combos.append(combo)
                 
