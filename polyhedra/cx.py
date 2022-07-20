@@ -1160,7 +1160,7 @@ def plot_fast(vertex_tensor, plot_dictionary, bound = None, colors="red_db", alp
         colors = ['clear']*(length-1) +['red']
         
     if alphas=="default": 
-        alphas = [1]*len(all_sse)
+        alphas = [1]*len(vertex_tensor[0])
     
     
     # this gets edges. 
