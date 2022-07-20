@@ -187,13 +187,14 @@ def get_layer_map_on_region(ss,weights,biases,device='cpu'):
 
 def tensor_tuple_to_numpy(tt): 
     
-    tt = np.array([t.detach().numpy() for t in tt])
+    tt = np.array([t.cpu().detach().numpy() for t in tt])
     
     return tuple(tt)
 
 def numpyize_plot_dict(pd): 
     
-    pd2 = {tensor_tuple_to_numpy(tt):pd[tt].detach().numpy() for tt in pd}
+    
+    pd2 = {tensor_tuple_to_numpy(tt):pd[tt].cpu().detach().numpy() for tt in pd}
     
     return pd2
     
@@ -770,7 +771,7 @@ def get_sse_coboundary_torch(all_ssv, length):
 
 
 
-def get_full_complex_fast(model, max_depth=None, device=None, mode='solve', verbose=False): 
+def get_full_complex(model, max_depth=None, device=None, mode='solve', verbose=False): 
     '''assumes model is feedforward and has appropriate structure.
     Outputs dictionary with vertices' signs and locations of vertices.''' 
     
@@ -898,6 +899,7 @@ def get_full_complex_fast(model, max_depth=None, device=None, mode='solve', verb
                 biases.append(bias)
                 
                 combo = torch.hstack([which_hyperplanes, torch.Tensor([num])+sum(architecture[1:i+1])])
+                combo = torch.hstack([which_hyperplanes, torch.tensor([num], device=device)+sum(architecture[1:i+1])])
                 combos.append(combo)
                 
             temp_points = torch.linalg.solve(torch.vstack(affmaps),-torch.vstack(biases))
