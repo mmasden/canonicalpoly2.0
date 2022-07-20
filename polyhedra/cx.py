@@ -1176,6 +1176,7 @@ def plot_fast(vertex_tensor, plot_dictionary, bound = None, colors="red_db", alp
         color_place = np.max(np.where(edge==0))
         
         c = colors[color_place]
+        a = alphas[color_place]
         
         # get the vertices of this edge  
         
@@ -1189,7 +1190,7 @@ def plot_fast(vertex_tensor, plot_dictionary, bound = None, colors="red_db", alp
             if c == 'clear': 
                 pass
             else: 
-                ax.plot(*np.stack([p1,p2]).T, c=c, alpha=alphas[edgeloc])
+                ax.plot(*np.stack([p1,p2]).T, c=c, alpha=a)
 
     ax.set_xlim([-bound,bound])
     ax.set_ylim([-bound,bound])
