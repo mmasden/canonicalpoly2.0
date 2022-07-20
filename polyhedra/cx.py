@@ -1158,6 +1158,10 @@ def plot_fast(vertex_tensor, plot_dictionary, bound = None, colors="red_db", alp
         
     if colors == "red_db": 
         colors = ['clear']*(length-1) +['red']
+        
+    if alphas=="default": 
+        alphas = [1]*len(all_sse)
+    
     
     # this gets edges. 
     all_sse, sse_coboundary = get_sse_coboundary_torch(vertex_tensor, length)
@@ -1185,7 +1189,7 @@ def plot_fast(vertex_tensor, plot_dictionary, bound = None, colors="red_db", alp
             if c == 'clear': 
                 pass
             else: 
-                ax.plot(*np.stack([p1,p2]).T, c=c, alpha=1)
+                ax.plot(*np.stack([p1,p2]).T, c=c, alpha=alphas[edgeloc])
 
     ax.set_xlim([-bound,bound])
     ax.set_ylim([-bound,bound])
