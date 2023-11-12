@@ -55,7 +55,7 @@ class DeepNeuralNetwork(nn.Module):
 
 class DeeperNeuralNetwork(nn.Module):
     def __init__(self, architecture):
-        super(DeeperNeuralNetwork, self).__init__()
+        super(DeepNeuralNetwork, self).__init__()
         
         self.architecture=architecture
         
@@ -530,8 +530,6 @@ def find_intersections(in_dim, last_layer, last_biases, image_dim, ssr, architec
                 
 def region_image_dimension(temp_ssr, architecture, depth=None): 
     
-    if depth is None: 
-        depth = len(architecture)-2
     # all top-dim regions begin at n_0-dimensional
     current_dim = architecture[0]
     
@@ -741,7 +739,7 @@ def create_append_torch(tensor_of_keys, list_of_items, key_to_add, thing_to_add 
     
     return tensor_of_keys
 
-def get_sse_coboundary_torch(all_ssv, length, verbose=False):
+def get_sse_coboundary_torch(all_ssv, length):
         
     locs = torch.where(all_ssv==0)
     
@@ -771,18 +769,11 @@ def get_sse_coboundary_torch(all_ssv, length, verbose=False):
     return all_sse[1:], sse_coboundary_list[1:]
 
 
-def get_full_complex(model, 
-                        max_depth=None, 
-                        device=None, 
-                        mode='solve', 
-                        verbose=False, 
-                        get_unbounded=False, 
-                        thickdb=False): 
+
+
+def get_full_complex(model, max_depth=None, device=None, mode='solve', verbose=False): 
     '''assumes model is feedforward and has appropriate structure.
-    Outputs dictionary with vertices' signs and locations of vertices. 
-    If get_unbounded is True, then also returns a second dictionary, 
-    with unbounded edges' sign sequences, 
-    their starting vertex, and their direction.''' 
+    Outputs dictionary with vertices' signs and locations of vertices.''' 
     
     if device is None: 
         device='cpu'
@@ -1147,137 +1138,10 @@ def plot_complex(plot_dict, num_comparison, dim, ax=None, colors=None):
                     ax.plot(*np.vstack([plot_dict[v],plot_dict[w]]).T, c=color,alpha=.5,zorder=1)
                     
     return ax
-
-def get_unbounded_edges(model, output, max_depth=None): 
-    #currently only works for input dimension 2 
     
-    parameters = list(model.parameters())
-    
-    if max_depth is None: 
-        depth = len(parameters)//2 
-    else: 
-        depth = max_depth
-
-   # print(depth)
-    architecture = [parameters[0].shape[1]] #input dimension 
-    
-    
-    for i in range(depth): 
-        architecture.append(parameters[2*i].shape[0]) #intermediate dimensions 
-        
-    architecture = tuple(architecture) 
-   
-
-    cumulative_architecture = torch.Tensor([sum(architecture[1:i+1])-1 for i in range(1,len(architecture))])
-    
-    # actual work 
-    
-    pd = cx.numpyize_plot_dict(output[0])
-    
-    #get all edges. 
-    sse, sse_coboundary = cx.get_sse_coboundary_torch(output[2], sum(architecture[1:depth+1]))
-
-    #get all unbounded edges 
-    
-    unbounded_edges = [] 
-    unbounded_vertices = [] 
-    
-    for i, (ss, cob) in enumerate(zip(sse, sse_coboundary)): 
-        if len(cob)==1: 
-            unbounded_edges.append(ss)
-            unbounded_vertices.append(cob[0])
-
-    unbounded_edges = torch.vstack(unbounded_edges) 
-    unbounded_vertices = torch.vstack(unbounded_vertices)
-    
-    # Process: getting the vector of the unbounded edge, up to sign. 
-
-    unbounded_directions = [] 
-
-    for i, ss in enumerate(unbounded_edges): 
-        ss_incidence = torch.clone(ss)
-        ss_incidence[ss_incidence==0] = 1 
-
-        # first get the layer maps on the incident region.   
-        maps = cx.get_all_maps_on_region(ss_incidence, depth-1, parameters, architecture)
-
-        # identify which indices ss==0, and what layer 
-        
-        index_of_zero = torch.where(ss==0)[0][0]
-        
-        # get the layer corresponding to this index 
-        which_layer = torch.where(cumulative_architecture>=index_of_zero)[0][0]
-        #print(which_layer)
-
-        #get the layer map corresponding to this index 
-        lmap = maps[which_layer]
-
-      #  print(lmap)
-        
-        #get edge Linear maps. In 2d there is only one.  
-        
-       # print(index_of_zero)
-        if index_of_zero > cumulative_architecture[0]: 
-            all_Hi = lmap[int(index_of_zero - cumulative_architecture[which_layer-1]-1)]
-        else: 
-            all_Hi = lmap[int(index_of_zero)]
-        #print(all_Hi) 
-
-        #Get kerenel of the linear map 
-        vector = torch.Tensor([all_Hi[1], -all_Hi[0]])
-        vector = vector/torch.linalg.norm(vector)
-
-        #determine whether this vector should be in the same or opposite direction 
-
-        #find the vertex the edge is attached to 
-        ssv = unbounded_vertices[i]
-        point = pd[tuple(ssv.detach().numpy())]
-
-        #move along that vector from that point 
-        eval_point = (point+vector.detach().numpy())
-
-        #evaluate the linear map at that point associated with the vertex's other zero coordinate 
-        vertex_zero_indices = torch.where(ssv==0)[0]
-
-        compare_zero_index = vertex_zero_indices[vertex_zero_indices!=index_of_zero] 
-        which_layer_compare = torch.where(cumulative_architecture>=compare_zero_index)[0][0]
-        lmap = maps[which_layer_compare]
-        
-        if compare_zero_index > cumulative_architecture[0]: 
-            Hi_compare = lmap[int(compare_zero_index - cumulative_architecture[which_layer_compare-1]-1)]
-        else: 
-            Hi_compare = lmap[int(compare_zero_index)]
-
-        #evaluate eval_point
-        sign = sum(Hi_compare.detach().numpy()[0:2] * eval_point) +Hi_compare.detach().numpy()[2]
-        
-        if sign*ss[compare_zero_index]>0 : 
-            vector = vector 
-        else: 
-            vector = vector*-1 
-        
-        unbounded_directions.append(vector) 
-
-    unbounded_directions = torch.vstack(unbounded_directions)
-    
-    return     unbounded_edges, unbounded_vertices, unbounded_directions
 
 
-def plot_unbounded(pd, ub_e, ub_v, ub_d, ax, colors): 
-    '''Currently only works in input dimension 2.'''
-    for i in range(len(ub_e)): 
-        point = pd[tuple(ub_v[i].detach().numpy())]
-        
-        color_index = torch.where(ub_e[i]==0)[0][0]
-        
-        ax.arrow(point[0], point[1], ub_d[i][0].detach().numpy(), ub_d[i][1].detach().numpy(), 
-                 color=colors[color_index], zorder=2, head_width = .1)
-
-
-def plot_fast(vertex_tensor, plot_dictionary, 
-              bound = None, colors="red_db", 
-              alphas = "default", ax = None, 
-              return_vals=False): 
+def plot_fast(vertex_tensor, plot_dictionary, bound = None, colors="red_db", alphas = "default", ax = None): 
     
     ''' inputs pytorch vertex tensor and plot dictionary directly 
     if using output = cx.get_full_complex, then 
@@ -1332,111 +1196,3 @@ def plot_fast(vertex_tensor, plot_dictionary,
     ax.set_ylim([-bound,bound])
     
     return ax
-
-### borrowed from stackoverflow ### 
-### https://stackoverflow.com/questions/34017866/arrow-on-a-line-plot-with-matplotlib 
-
-def add_arrow(line, position=None, direction='right', size=15, color=None):
-    """
-    add an arrow to a line.
-
-    line:       Line2D object
-    position:   x-position of the arrow. If None, mean of xdata is taken
-    direction:  'left' or 'right'
-    size:       size of the arrow in fontsize points
-    color:      if None, line color is taken.
-    """
-    if color is None:
-        color = line.get_color()
-
-    xdata = line.get_xdata()
-    ydata = line.get_ydata()
-
-    if position is None:
-        position = xdata.mean()
-    # find closest index
-    start_ind = np.argmin(np.absolute(xdata - position))
-    if direction == 'right':
-        end_ind = start_ind + 1
-    else:
-        end_ind = start_ind - 1
-
-    line.axes.annotate('',
-        xytext=(xdata[start_ind], ydata[start_ind]),
-        xy=(xdata[end_ind], ydata[end_ind]),
-        arrowprops=dict(arrowstyle="->", color=color),
-        size=size
-    )
-    
-def is_critical_point(temppt, pd, model, edges, boundaries): 
-    # needs improvement
-    # pd=cx.numpyize_plot_dict(output[0])
-    
-    centerval = model(torch.tensor(np.array([pd[tuple(temppt.detach().numpy())]])))[-1].item()
-
-
-    locs = torch.where(temppt==0)
-
-    curve_up_directions = []
-    curve_down_directions = []
-    unbd_directions = [] 
-    
-    for loc in locs[0]:
-        e1 = torch.clone(temppt)
-        e1[loc] = 1 
-
-        e2 = torch.clone(temppt) 
-        e2[loc] = -1 
-
-        e1_index = torch.where((edges==e1).all(dim=1))[0] 
-        e2_index = torch.where((edges==e2).all(dim=1))[0] 
-
-       
-
-        if len(boundaries[e1_index]) == 1 or len(boundaries[e2_index])==1: 
-            unbd_directions.append(loc)
-            continue
-            
-        # check whether the network will be constant on the edge using sign sequences
-        # if so, v is necessarily a critical point. 
-        # these will be classified differently
-        
-        e1collapsed = torch.clone(e1) 
-        
-        e1collapsed[e1collapsed==0] = -1 
-        
-        e2collapsed = torch.clone(e1) 
-        
-        e2collapsed[e2collapsed==0] = -1 
-        
-        
-        #if the edge has been collapsed: 
-        if region_image_dimension(e1collapsed, model.architecture, depth=len(model.architecture)-2) == 0: 
-            return True, -1
-        elif region_image_dimension(e2collapsed, model.architecture, depth=len(model.architecture)-2) == 0:
-            return True, -1
-        
-         # the location of the other point is the other point in the edge 
-        
-        p1_loc = 1- torch.where((torch.vstack(boundaries[e1_index] )== temppt).all(dim=1))[0][0]
-        p1 = torch.vstack(boundaries[e1_index])[p1_loc].detach().numpy()
-
-        p2_loc = 1- torch.where((torch.vstack(boundaries[e2_index] )== temppt).all(dim=1))[0][0]
-        p2 = torch.vstack(boundaries[e2_index])[p2_loc].detach().numpy()
-
-        ptval = model(torch.tensor(np.array([pd[tuple(p1)],pd[tuple(p2)]])))[-1]
-        
-        if (ptval>centerval).all(): 
-            curve_up_directions.append(loc) 
-        elif (ptval<centerval).all(): 
-            curve_down_directions.append(loc)
-        else:
-            pass
-        
-
-    if len(curve_up_directions)+len(curve_down_directions)==sum(temppt==0): 
-        index = len(curve_down_directions)
-
-        return True, index
-    else:
-        return False, None
