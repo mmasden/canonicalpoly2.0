@@ -770,20 +770,107 @@ def get_sse_coboundary_torch(all_ssv, length, verbose=False):
     
     return all_sse[1:], sse_coboundary_list[1:]
 
+def thicken_model(model_in, threshold_shifts): 
+    # currently applies to DeepNeuralNetwork (k,n,n,1) only. 
+    # threshold_shifts should be a list of the form [low shift, upper shift] 
+    # where the first number is negative and the second number is positive. 
+    
+    sd = model_in.state_dict()
+    new_arch = list(model_in.architecture)
+    new_arch[-1] = new_arch[-1]+1
+    new_arch = tuple(new_arch)
+    new_arch
+    
+    thickened_model = DeepNeuralNetwork(new_arch)
+    
+    params = [] 
+    for p in model_in.parameters(): 
+        params.append(p.data)
+    
+    params[-2] = params[-2].repeat((2,1))
+    params[-1] = params[-1].repeat(2)
+    params[-1] += torch.Tensor(threshold_shifts)
+    
+    sd["linear_2.weight"] = params[-2]
+    sd["linear_2.bias"] = params[-1] 
+    
+    thickened_model.load_state_dict(sd)
+    
+    return thickened_model
 
-def get_full_complex(model, 
+def add_bbox(model_in, bbox):
+    # currently applies to DeepNeuralNetwork (k,n,n,l) only. 
+    # bbox should be a positive float and the bounding box will be 
+    # added at +- bbox in each dimension.
+
+    sd = model_in.state_dict()
+    new_arch = list(model_in.architecture)
+    
+    #add a positive and negative hyperplane in each dimension 
+    new_arch[1] = new_arch[1]+2*(model_in.architecture[0])
+    new_arch = tuple(new_arch)
+    
+    boxed_model = DeepNeuralNetwork(new_arch)
+
+    params = [] 
+    for p in model_in.parameters(): 
+        params.append(p.data)
+        
+    old_weight = sd["linear_0.weight"]
+
+    extra_weight = torch.zeros((model_in.architecture[0]*2, model_in.architecture[0]))
+
+    old_bias = sd["linear_0.bias"] 
+
+    extra_bias = torch.zeros(model_in.architecture[0]*2)
+
+    for k in range(model_in.architecture[0]): 
+        extra_weight[2*k,k] = 1
+        extra_weight[2*k+1,k] = 1
+        extra_bias[2*k] = -bbox
+        extra_bias[2*k+1] = bbox
+
+    extra_weight = extra_weight + torch.randn(extra_weight.shape)*.0001
+
+    new_weight = torch.vstack((extra_weight,old_weight))
+    new_bias = torch.hstack((extra_bias,old_bias))
+
+
+    sd["linear_0.weight"] = new_weight
+    sd["linear_0.bias"] = new_bias
+
+    disregarded_weights = torch.randn((model_in.architecture[2],2*model_in.architecture[0]))*.0001
+
+    #print(sd["linear_1.weight"], disregarded_weights)
+    sd["linear_1.weight"] = torch.hstack((disregarded_weights,sd["linear_1.weight"]))
+
+    boxed_model.load_state_dict(sd)
+    
+    return boxed_model
+
+def get_full_complex(model_in, 
                         max_depth=None, 
                         device=None, 
                         mode='solve', 
                         verbose=False, 
                         get_unbounded=False, 
-                        thickdb=False): 
+                        thickdb=False, 
+                        bbox=False): 
     '''assumes model is feedforward and has appropriate structure.
     Outputs dictionary with vertices' signs and locations of vertices. 
     If get_unbounded is True, then also returns a second dictionary, 
     with unbounded edges' sign sequences, 
-    their starting vertex, and their direction.''' 
-    
+    their starting vertex, and their direction.'''
+                           
+    #do some surgery on the last layer in the case of thickdb. 
+    if thickdb: 
+        model = thicken_model(model_in, thickdb) 
+    else: 
+        model = model_in
+                            
+    if bbox: 
+        model = add_bbox(model,bbox)
+        
     if device is None: 
         device='cpu'
     
@@ -795,12 +882,14 @@ def get_full_complex(model,
         depth = max_depth
     
     architecture = [parameters[0].shape[1]] #input dimension 
-    
+                   
     for i in range(depth): 
         architecture.append(parameters[2*i].shape[0]) #intermediate dimensions 
         
     architecture = tuple(architecture) 
-    
+
+
+
     in_dim = architecture[0]
     
     signs = torch.tensor(get_signs(in_dim), device=device).float()
@@ -809,30 +898,49 @@ def get_full_complex(model,
     #get first layer sign sequences.
     
     if mode == 'solve':
-        temp_points, temp_combos = find_intersections(in_dim,parameters[0],parameters[1], None, None,    architecture, device=device)
+        temp_points, temp_combos = find_intersections(in_dim,parameters[0],
+                                                      parameters[1], None, None,    
+                                                      architecture, device=device)
+
+       
     else: 
         print("Mode invalid.")
         
     #initialize full list of points, sign sequences, and ss_dict  
     all_points, all_ssv = determine_existing_points(temp_points,temp_combos,model, device=device)
-    
+
+    #trim outer points from bounding box
+    if bbox: 
+        for k in range(architecture[0]):
+            all_points = all_points[all_ssv[:,2*k]!= all_ssv[:,2*k+1]]
+            all_ssv = all_ssv[all_ssv[:,2*k]!= all_ssv[:,2*k+1]]
+                            
     if verbose: 
         print("First Layer Complete")
-    
+
+        
     tsv=all_ssv.clone() #.cpu().detach().numpy()
     
     all_ss_dict = {tuple(ss.int()): pt for ss, pt in zip(tsv,all_points)}
 
     # get subsequent layer sign sequences 
     # requires updating points, ssv and ss_dict 
-        
+
+    nlayers=len(architecture)-1
+                            
     #loop through layers 
-    for i in range(1, len(architecture)-1):
+    for i in range(1, nlayers):
 
         #intead of obtaining regions which are present from previous layer 
         # first obtain edges which are present! 
         
-        sse = get_sse(all_ssv, sum(architecture[1:i+1]))
+        sse = get_sse(all_ssv, sum(architecture[1:i+1])) 
+
+        #if bb, trim edges under consideration.
+
+        if bbox: 
+            for k in range(architecture[0]):
+                sse = sse[sse[:,2*k]!= sse[:,2*k+1]]
                 
         #initialize placeholder for new points and ssv 
         new_points, new_ssv = [],[]
@@ -968,6 +1076,7 @@ def get_full_complex(model,
             
             # use sse and ssr as before except sse might not be the ss of an edge, just a k-face
 
+            
         for k in range(2,min(in_dim+1, architecture[i+1]+1)): 
             if verbose:
                 print("finding intersections of {} new hyperplanes with {} old hyperplanes".format(k, in_dim-k))
@@ -975,7 +1084,7 @@ def get_full_complex(model,
             # with n_0-k other hyperplanes. Can't do this if there aren't n_0-k hyperplanes
             # to intersect! 
             
-            if len(new_points_by_dim[-1])==0: 
+            if len(new_points_by_dim[-1])==0 or (thickdb and i==nlayers-1): #skip this in the case of thickened decision boundary.
                 break
             else:
                 pass
