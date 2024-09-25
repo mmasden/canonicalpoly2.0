@@ -1281,10 +1281,10 @@ def get_unbounded_edges(model, output, max_depth=None):
     
     # actual work 
     
-    pd = cx.numpyize_plot_dict(output[0])
+    pd = numpyize_plot_dict(output[0])
     
     #get all edges. 
-    sse, sse_coboundary = cx.get_sse_coboundary_torch(output[2], sum(architecture[1:depth+1]))
+    sse, sse_coboundary = get_sse_coboundary_torch(output[2], sum(architecture[1:depth+1]))
 
     #get all unbounded edges 
     
@@ -1308,7 +1308,7 @@ def get_unbounded_edges(model, output, max_depth=None):
         ss_incidence[ss_incidence==0] = 1 
 
         # first get the layer maps on the incident region.   
-        maps = cx.get_all_maps_on_region(ss_incidence, depth-1, parameters, architecture)
+        maps = get_all_maps_on_region(ss_incidence, depth-1, parameters, architecture)
 
         # identify which indices ss==0, and what layer 
         
